@@ -230,7 +230,7 @@ export default function Home() {
         }
       `}</style>
 
-      <main className="bg-gray-50 min-h-screen relative">
+      <main className="bg-white min-h-screen relative">
         {/* Hamburger Menu Button */}
         <button
           onClick={() => setMenuOpen(!menuOpen)}
