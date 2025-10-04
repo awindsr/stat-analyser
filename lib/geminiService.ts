@@ -49,8 +49,9 @@ Generate exactly 4 distinct, insightful facts about this change. Each fact shoul
 2. Focus on different aspects (economic, social, environmental, policy)
 3. Be educational and practical
 4. Help users understand the interconnected nature of these statistics
+5. Use markdown formatting for emphasis (bold, italic, lists, etc.)
 
-Format as a numbered list where each item is a separate fact. Always provide exactly 4 facts.
+Format as a numbered list where each item is a separate fact. Always provide exactly 4 facts. Use markdown formatting to make the facts more engaging and readable.
 `;
 
     const result = await model.generateContent(prompt);

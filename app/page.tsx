@@ -6,6 +6,7 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { getCountryData, type CountryStats } from "@/lib/countryData";
 import { generateSliderFacts, generateCountryInsight, type SliderChange } from "@/lib/geminiService";
+import ReactMarkdown from 'react-markdown';
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -78,14 +79,6 @@ export default function Home() {
       setSliderValues(newValues);
       setPreviousValues(newValues);
       setMenuOpen(true);
-      
-      // Generate initial country insight
-      try {
-        const insight = await generateCountryInsight(countryName, newValues);
-        showInsight(`Welcome to ${countryName}`, insight);
-      } catch (error) {
-        showInsight(`Welcome to ${countryName}`, `Welcome to ${countryName}! This country's development indicators show interesting patterns. Try adjusting the sliders to explore how different variables interact.`);
-      }
     }
   };
 
@@ -636,18 +629,18 @@ export default function Home() {
                           <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
                             {index + 1}
                           </div>
-                          <p className="text-white/90 leading-relaxed text-sm">
-                            {fact}
-                          </p>
+                          <div className="text-white/90 leading-relaxed text-sm prose prose-invert prose-sm max-w-none">
+                            <ReactMarkdown>{fact}</ReactMarkdown>
+                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-8">
-                    <p className="text-white/90 leading-relaxed text-lg whitespace-pre-wrap">
-                      {insightContent}
-                    </p>
+                    <div className="text-white/90 leading-relaxed text-lg prose prose-invert prose-lg max-w-none">
+                      <ReactMarkdown>{insightContent}</ReactMarkdown>
+                    </div>
                   </div>
                 )}
               </div>
