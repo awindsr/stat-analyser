@@ -92,7 +92,7 @@ export default function Home() {
       // Load country-specific data
       const countryStats = getCountryData(countryName);
       // Calculate carbon emissions for the country
-      const carbonEmissions = -2772.8667 + 70.3028 * countryStats.lifeExpectancy + 
+      const carbonEmissions = 2772.8667 + 70.3028 * countryStats.lifeExpectancy + 
                              0.0762 * countryStats.airQuality - 1.2057 * countryStats.waterQuality - 
                              281.6896 * countryStats.populationGrowth - 0.1628 * countryStats.gdp;
       const newValues = {
@@ -129,7 +129,7 @@ export default function Home() {
     };
 
     const predictCarbonEmissions = (lifeExpectancy: number, airQuality: number, waterQuality: number, populationGrowth: number, gdp: number) => {
-      return -2772.8667 + 70.3028 * lifeExpectancy + 0.0762 * airQuality - 1.2057 * waterQuality - 281.6896 * populationGrowth - 0.1628 * gdp;
+      return 2772.8667 + 70.3028 * lifeExpectancy + 0.0762 * airQuality - 1.2057 * waterQuality - 281.6896 * populationGrowth - 0.1628 * gdp;
     };
 
     // Start with current values
