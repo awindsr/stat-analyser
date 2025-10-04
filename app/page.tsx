@@ -1,103 +1,409 @@
-import Image from "next/image";
+"use client"
+import { useState, useEffect } from "react";
+import Script from "next/script";
+import World from "@react-map/world";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import { getCountryData, type CountryStats } from "@/lib/countryData";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [sliderValues, setSliderValues] = useState<CountryStats>({
+    lifeExpectancy: 75,
+    airQuality: 50,
+    waterQuality: 50,
+    populationGrowth: 2,
+    gdp: 25000
+  });
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const handleCountrySelect = (countryName: string | null) => {
+    if (countryName) {
+      setSelectedCountry(countryName);
+      // Load country-specific data
+      const countryStats = getCountryData(countryName);
+      setSliderValues(countryStats);
+      setMenuOpen(true);
+      toast(`Selected: ${countryName}`);
+    }
+  };
+
+  const handleSliderChange = (sliderId: string, value: number) => {
+    // Calculate new values with predictions
+    const updatedValues = {
+      ...sliderValues,
+      [sliderId]: value
+    };
+    
+    // Apply predictions for other sliders
+    const predicted = calculatePredictions(updatedValues, sliderId);
+    
+    const finalValues = { ...updatedValues };
+    if (sliderId !== 'lifeExpectancy') finalValues.lifeExpectancy = Math.max(50, Math.min(100, predicted.lifeExpectancy));
+    if (sliderId !== 'airQuality') finalValues.airQuality = Math.max(0, Math.min(100, predicted.airQuality));
+    if (sliderId !== 'waterQuality') finalValues.waterQuality = Math.max(0, Math.min(100, predicted.waterQuality));
+    if (sliderId !== 'populationGrowth') finalValues.populationGrowth = Math.max(-5, Math.min(5, predicted.populationGrowth));
+    if (sliderId !== 'gdp') finalValues.gdp = Math.max(0, Math.min(150000, predicted.gdp));
+    
+    setSliderValues(finalValues);
+  };
+
+  const calculatePredictions = (values: CountryStats, sourceSliderId: string) => {
+    const predictLifeExpectancy = (airQuality: number, waterQuality: number, populationGrowth: number, gdp: number) => {
+      return 63.1253 + 0.0128 * airQuality + 0.1642 * waterQuality - 7.9104 * populationGrowth + 0.0003 * gdp;
+    };
+
+    const predictAirQuality = (lifeExpectancy: number, waterQuality: number, populationGrowth: number, gdp: number) => {
+      return -1.0948 + 2.8352 * lifeExpectancy + 1.2904 * waterQuality - 26.8613 * populationGrowth - 0.0368 * gdp;
+    };
+
+    const predictWaterQuality = (lifeExpectancy: number, airQuality: number, populationGrowth: number, gdp: number) => {
+      return -44.3600 + 1.3270 * lifeExpectancy + 0.0471 * airQuality + 3.3284 * populationGrowth + 0.0025 * gdp;
+    };
+
+    const predictPopulationGrowth = (lifeExpectancy: number, airQuality: number, waterQuality: number, gdp: number) => {
+      return 6.5226 - 0.0793 * lifeExpectancy - 0.0012 * airQuality + 0.0041 * waterQuality - 0.0001 * gdp;
+    };
+
+    const predictGDP = (lifeExpectancy: number, airQuality: number, waterQuality: number, populationGrowth: number) => {
+      return 1981.7790 + 35.4615 * lifeExpectancy - 22.9526 * airQuality + 42.3187 * waterQuality - 1064.9488 * populationGrowth;
+    };
+
+    // Calculate predicted values
+    return {
+      lifeExpectancy: sourceSliderId === 'lifeExpectancy' ? values.lifeExpectancy : predictLifeExpectancy(values.airQuality, values.waterQuality, values.populationGrowth, values.gdp),
+      airQuality: sourceSliderId === 'airQuality' ? values.airQuality : predictAirQuality(values.lifeExpectancy, values.waterQuality, values.populationGrowth, values.gdp),
+      waterQuality: sourceSliderId === 'waterQuality' ? values.waterQuality : predictWaterQuality(values.lifeExpectancy, values.airQuality, values.populationGrowth, values.gdp),
+      populationGrowth: sourceSliderId === 'populationGrowth' ? values.populationGrowth : predictPopulationGrowth(values.lifeExpectancy, values.airQuality, values.waterQuality, values.gdp),
+      gdp: sourceSliderId === 'gdp' ? values.gdp : predictGDP(values.lifeExpectancy, values.airQuality, values.waterQuality, values.populationGrowth)
+    };
+  };
+
+  const updateChart = (values: CountryStats) => {
+    if (typeof window === 'undefined' || !(window as any).Plotly) return;
+
+    // Calculate predicted values for chart display
+    const predicted = calculatePredictions(values, 'none');
+
+    // Create Plotly bar chart
+    const trace = {
+      x: ['Life Expectancy', 'Air Quality', 'Water Quality', 'Population Growth', 'GDP'],
+      y: [
+        predicted.lifeExpectancy,
+        predicted.airQuality,
+        predicted.waterQuality,
+        predicted.populationGrowth,
+        predicted.gdp
+      ],
+      type: 'bar',
+      marker: { color: '#3B82F6' }
+    };
+
+    const layout = {
+      title: { 
+        text: 'Predicted Values', 
+        x: 0.5, 
+        xanchor: 'center',
+        font: { family: 'Space Grotesk', size: 20, color: '#333333' }
+      },
+      yaxis: { 
+        title: 'Value', 
+        titlefont: { family: 'Space Grotesk', size: 16, color: '#333333' },
+        tickfont: { family: 'Space Grotesk', size: 14, color: '#333333' }
+      },
+      xaxis: {
+        tickfont: { family: 'Space Grotesk', size: 14, color: '#333333' }
+      },
+      margin: { t: 60, b: 60, l: 60, r: 60 },
+      showlegend: false,
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      responsive: true
+    };
+
+    const chartElement = document.getElementById('chart');
+    if (chartElement) {
+      (window as any).Plotly.newPlot('chart', [trace], layout);
+    }
+  };
+
+  useEffect(() => {
+    // Update chart whenever slider values change
+    if (typeof window !== 'undefined' && (window as any).Plotly && selectedCountry) {
+      updateChart(sliderValues);
+    }
+  }, [sliderValues, selectedCountry]);
+
+  useEffect(() => {
+    // Initial chart render when Plotly loads
+    const timer = setTimeout(() => {
+      if (typeof window !== 'undefined' && (window as any).Plotly && selectedCountry) {
+        updateChart(sliderValues);
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [selectedCountry]);
+
+  return (
+    <>
+      <Script src="https://cdn.plot.ly/plotly-latest.min.js" strategy="afterInteractive" onLoad={() => updateChart(sliderValues)} />
+      <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+      
+      <style jsx global>{`
+        * {
+          font-family: 'Space Grotesk', sans-serif;
+        }
+        
+        /* Custom slider styling */
+        input[type="range"] {
+          -webkit-appearance: none;
+          width: 100%;
+          height: 8px;
+          background: #E5E7EB;
+          border-radius: 4px;
+          outline: none;
+          transition: background 0.3s ease;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          width: 20px;
+          height: 20px;
+          background: #3B82F6;
+          border-radius: 50%;
+          cursor: pointer;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+          transition: transform 0.2s ease;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb:hover {
+          transform: scale(1.2);
+        }
+        
+        input[type="range"]::-moz-range-thumb {
+          width: 20px;
+          height: 20px;
+          background: #3B82F6;
+          border-radius: 50%;
+          cursor: pointer;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+          transition: transform 0.2s ease;
+        }
+        
+        input[type="range"]::-moz-range-thumb:hover {
+          transform: scale(1.2);
+        }
+      `}</style>
+
+      <main className="bg-gray-50 min-h-screen relative">
+        {/* Hamburger Menu Button */}
+        <button
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="fixed top-6 right-6 z-50 bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-lg shadow-lg transition-all duration-300"
+          aria-label="Toggle menu"
+        >
+          <svg
+            className="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            {menuOpen ? (
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            ) : (
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            )}
+          </svg>
+        </button>
+
+        {/* Side Menu */}
+        <div
+          className={`fixed top-0 right-0 h-full w-full sm:w-96 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out z-40 overflow-y-auto ${
+            menuOpen ? 'translate-x-0' : 'translate-x-full'
+          }`}
+        >
+          <div className="p-6 pt-20">
+            {/* Country Header */}
+            {selectedCountry ? (
+              <>
+                <div className="mb-6 pb-4 border-b border-gray-200">
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">{selectedCountry}</h2>
+                  <p className="text-sm text-gray-500">Adjust statistical variables</p>
+                </div>
+                
+                {/* Current Statistics Summary */}
+                <div className="mb-6 bg-blue-50 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Current Statistics</h3>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="bg-white rounded p-2">
+                      <div className="text-gray-500">Life Expectancy</div>
+                      <div className="font-bold text-blue-600">{sliderValues.lifeExpectancy.toFixed(1)} yrs</div>
+                    </div>
+                    <div className="bg-white rounded p-2">
+                      <div className="text-gray-500">Air Quality</div>
+                      <div className="font-bold text-blue-600">{sliderValues.airQuality.toFixed(1)}/100</div>
+                    </div>
+                    <div className="bg-white rounded p-2">
+                      <div className="text-gray-500">Water Quality</div>
+                      <div className="font-bold text-blue-600">{sliderValues.waterQuality.toFixed(1)}/100</div>
+                    </div>
+                    <div className="bg-white rounded p-2">
+                      <div className="text-gray-500">Pop. Growth</div>
+                      <div className="font-bold text-blue-600">{sliderValues.populationGrowth.toFixed(2)}%</div>
+                    </div>
+                    <div className="bg-white rounded p-2 col-span-2">
+                      <div className="text-gray-500">GDP per capita</div>
+                      <div className="font-bold text-blue-600">${sliderValues.gdp.toFixed(0)}</div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="mb-6 pb-4 border-b border-gray-200">
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">No Country Selected</h2>
+                <p className="text-sm text-gray-500">Select a country from the map to view and adjust its data</p>
+              </div>
+            )}
+            
+            {/* Sliders */}
+            <div className="grid grid-cols-1 gap-6">
+              <div>
+                <label htmlFor="lifeExpectancy" className="block text-sm font-medium text-gray-700 mb-2">
+                  Life Expectancy (50–100 years)
+                </label>
+                <input
+                  type="range"
+                  id="lifeExpectancy"
+                  min="50"
+                  max="100"
+                  value={sliderValues.lifeExpectancy}
+                  step="0.1"
+                  className="w-full"
+                  onChange={(e) => handleSliderChange('lifeExpectancy', parseFloat(e.target.value))}
+                />
+                <span className="text-sm text-gray-500 mt-1 block">{sliderValues.lifeExpectancy.toFixed(1)}</span>
+              </div>
+
+              <div>
+                <label htmlFor="airQuality" className="block text-sm font-medium text-gray-700 mb-2">
+                  Air Quality (0–100)
+                </label>
+                <input
+                  type="range"
+                  id="airQuality"
+                  min="0"
+                  max="100"
+                  value={sliderValues.airQuality}
+                  step="0.1"
+                  className="w-full"
+                  onChange={(e) => handleSliderChange('airQuality', parseFloat(e.target.value))}
+                />
+                <span className="text-sm text-gray-500 mt-1 block">{sliderValues.airQuality.toFixed(1)}</span>
+              </div>
+
+              <div>
+                <label htmlFor="waterQuality" className="block text-sm font-medium text-gray-700 mb-2">
+                  Water Quality (0–100)
+                </label>
+                <input
+                  type="range"
+                  id="waterQuality"
+                  min="0"
+                  max="100"
+                  value={sliderValues.waterQuality}
+                  step="0.1"
+                  className="w-full"
+                  onChange={(e) => handleSliderChange('waterQuality', parseFloat(e.target.value))}
+                />
+                <span className="text-sm text-gray-500 mt-1 block">{sliderValues.waterQuality.toFixed(1)}</span>
+              </div>
+
+              <div>
+                <label htmlFor="populationGrowth" className="block text-sm font-medium text-gray-700 mb-2">
+                  Population Growth (-5–5%)
+                </label>
+                <input
+                  type="range"
+                  id="populationGrowth"
+                  min="-5"
+                  max="5"
+                  value={sliderValues.populationGrowth}
+                  step="0.01"
+                  className="w-full"
+                  onChange={(e) => handleSliderChange('populationGrowth', parseFloat(e.target.value))}
+                />
+                <span className="text-sm text-gray-500 mt-1 block">{sliderValues.populationGrowth.toFixed(2)}%</span>
+              </div>
+
+              <div>
+                <label htmlFor="gdp" className="block text-sm font-medium text-gray-700 mb-2">
+                  GDP per capita (0–150000 USD)
+                </label>
+                <input
+                  type="range"
+                  id="gdp"
+                  min="0"
+                  max="150000"
+                  value={sliderValues.gdp}
+                  step="100"
+                  className="w-full"
+                  onChange={(e) => handleSliderChange('gdp', parseFloat(e.target.value))}
+                />
+                <span className="text-sm text-gray-500 mt-1 block">${sliderValues.gdp.toFixed(0)}</span>
+              </div>
+            </div>
+          </div>
         </div>
+
+        {/* Overlay */}
+        {menuOpen && (
+          <div
+            className="fixed inset-0 bg-black/10 bg-opacity-10 z-30"
+            onClick={() => setMenuOpen(false)}
+          />
+        )}
+
+        {/* Main Content */}
+        <div className="flex items-center justify-center min-h-screen p-4 sm:p-6">
+          <div className="w-full max-w-6xl">
+            <div className="bg-white rounded-xl  p-6 sm:p-8 mb-8">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 text-center mb-4">
+                Interactive World Statistics
+              </h1>
+              <p className="text-gray-600 text-sm sm:text-base text-center mb-6">
+                Select a country to explore and adjust statistical variables
+              </p>
+
+              {/* World Map */}
+              <div className="flex justify-center">
+                <World onSelect={handleCountrySelect} size={1000} hoverColor="BLUE" type="select-single" />
+              </div>
+            </div>
+
+            {/* Plotly Chart */}
+            {selectedCountry && (
+              <div className="bg-white rounded-xl shadow-lg p-6 sm:p-8">
+                <h2 className="text-xl font-bold text-gray-800 mb-4">
+                  Predicted Values for {selectedCountry}
+                </h2>
+                <div id="chart" className="w-full h-80 sm:h-96"></div>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <ToastContainer />
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+    </>
   );
 }
