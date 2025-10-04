@@ -2,11 +2,20 @@
 import { useState, useEffect, useCallback } from "react";
 import Script from "next/script";
 import World from "@react-map/world";
-import { ToastContainer, toast } from "react-toastify";
+import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { getCountryData, type CountryStats } from "@/lib/countryData";
 import { generateSliderFacts, generateCountryInsight, type SliderChange } from "@/lib/geminiService";
 import ReactMarkdown from 'react-markdown';
+
+// Declare Plotly on window object
+declare global {
+  interface Window {
+    Plotly?: {
+      newPlot: (id: string, data: unknown[], layout: unknown) => void;
+    };
+  }
+}
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -37,7 +46,15 @@ export default function Home() {
 
   // Show insight modal with content based on current values
   const showInsight = async (title: string) => {
-    const insight = await generateCountryInsight(selectedCountry, sliderValues);
+    if (!selectedCountry) return;
+    const insight = await generateCountryInsight(selectedCountry, {
+      lifeExpectancy: sliderValues.lifeExpectancy,
+      airQuality: sliderValues.airQuality,
+      waterQuality: sliderValues.waterQuality,
+      populationGrowth: sliderValues.populationGrowth,
+      gdp: sliderValues.gdp,
+      carbonEmissions: sliderValues.carbonEmissions || 0
+    });
     setInsightTitle(title);
     setInsightContent(insight);
     setInsightFacts([]);
@@ -45,8 +62,7 @@ export default function Home() {
   };
 
   // Show facts modal based on current values
-  const showFacts = async (title: string, sliderId: number) => {
-    const facts = await generateSliderFacts(sliderId, sliderValues);
+  const showFacts = async (title: string, facts: string[]) => {
     setInsightTitle(title);
     setInsightFacts(facts);
     setInsightContent('');
@@ -77,12 +93,12 @@ export default function Home() {
     
     const cachedFacts = sliderFactsCache[sliderId];
     if (cachedFacts && cachedFacts.length > 0) {
-      showFacts(`${sliderNames[sliderId]} Insights`, sliderId);
+      showFacts(`${sliderNames[sliderId]} Insights`, cachedFacts);
     } else {
-      showInsight(
-        `${sliderNames[sliderId]}`,
-        `Adjust the ${sliderNames[sliderId]} slider to see how it affects other variables and generate insights about the changes.`
-      );
+      setInsightTitle(`${sliderNames[sliderId]}`);
+      setInsightContent(`Adjust the ${sliderNames[sliderId]} slider to see how it affects other variables and generate insights about the changes.`);
+      setInsightFacts([]);
+      setShowInsightModal(true);
     }
   };
 
@@ -254,8 +270,8 @@ export default function Home() {
     }
   }, [calculatePredictions, sliderValues, selectedCountry]);
 
-  const updateChart = (values: CountryStats) => {
-    if (typeof window === 'undefined' || !(window as any).Plotly) return;
+  const updateChart = useCallback((values: CountryStats) => {
+    if (typeof window === 'undefined' || !window.Plotly) return;
 
     // Calculate predicted values for chart display
     const predicted = calculatePredictions(values, 'none');
@@ -298,29 +314,29 @@ export default function Home() {
     };
 
     const chartElement = document.getElementById('chart');
-    if (chartElement) {
-      (window as any).Plotly.newPlot('chart', [trace], layout);
+    if (chartElement && window.Plotly) {
+      window.Plotly.newPlot('chart', [trace], layout);
     }
-  };
+  }, [calculatePredictions]);
 
   useEffect(() => {
     // Update chart whenever slider values change and chart is visible
-    if (typeof window !== 'undefined' && (window as any).Plotly && selectedCountry && showChart) {
+    if (typeof window !== 'undefined' && window.Plotly && selectedCountry && showChart) {
       updateChart(sliderValues);
     }
-  }, [sliderValues, selectedCountry, showChart]);
+  }, [sliderValues, selectedCountry, showChart, updateChart]);
 
   useEffect(() => {
     // Initial chart render when Plotly loads and chart is shown
     if (showChart && selectedCountry) {
       const timer = setTimeout(() => {
-        if (typeof window !== 'undefined' && (window as any).Plotly) {
+        if (typeof window !== 'undefined' && window.Plotly) {
           updateChart(sliderValues);
         }
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [selectedCountry, showChart, sliderValues]);
+  }, [selectedCountry, showChart, sliderValues, updateChart]);
 
   return (
     <>
