@@ -5,6 +5,7 @@ import World from "@react-map/world";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { getCountryData, type CountryStats } from "@/lib/countryData";
+import { generateSliderFacts, generateCountryInsight, type SliderChange } from "@/lib/geminiService";
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -17,8 +18,51 @@ export default function Home() {
     gdp: 25000,
     carbonEmissions: 0
   });
+  const [previousValues, setPreviousValues] = useState<CountryStats>({
+    lifeExpectancy: 75,
+    airQuality: 50,
+    waterQuality: 50,
+    populationGrowth: 2,
+    gdp: 25000,
+    carbonEmissions: 0
+  });
+  const [showChart, setShowChart] = useState(false);
+  const [showInsightModal, setShowInsightModal] = useState(false);
+  const [insightContent, setInsightContent] = useState('');
+  const [insightTitle, setInsightTitle] = useState('');
+  const [insightFacts, setInsightFacts] = useState<string[]>([]);
+  const [currentFactSet, setCurrentFactSet] = useState(0);
 
-  const handleCountrySelect = (countryName: string | null) => {
+  const showInsight = (title: string, content: string) => {
+    setInsightTitle(title);
+    setInsightContent(content);
+    setInsightFacts([]);
+    setCurrentFactSet(0);
+    setShowInsightModal(true);
+  };
+
+  const showFacts = (title: string, facts: string[]) => {
+    setInsightTitle(title);
+    setInsightFacts(facts);
+    setInsightContent('');
+    setCurrentFactSet(0);
+    setShowInsightModal(true);
+  };
+
+  const nextFactSet = () => {
+    setCurrentFactSet((prev) => (prev + 1) % Math.ceil(insightFacts.length / 4));
+  };
+
+  const prevFactSet = () => {
+    setCurrentFactSet((prev) => (prev - 1 + Math.ceil(insightFacts.length / 4)) % Math.ceil(insightFacts.length / 4));
+  };
+
+  const getCurrentFacts = () => {
+    const startIndex = currentFactSet * 4;
+    return insightFacts.slice(startIndex, startIndex + 4);
+  };
+
+  const handleCountrySelect = async (countryName: string | null) => {
     if (countryName) {
       setSelectedCountry(countryName);
       // Load country-specific data
@@ -27,12 +71,21 @@ export default function Home() {
       const carbonEmissions = -2772.8667 + 70.3028 * countryStats.lifeExpectancy + 
                              0.0762 * countryStats.airQuality - 1.2057 * countryStats.waterQuality - 
                              281.6896 * countryStats.populationGrowth - 0.1628 * countryStats.gdp;
-      setSliderValues({
+      const newValues = {
         ...countryStats,
         carbonEmissions: carbonEmissions
-      });
+      };
+      setSliderValues(newValues);
+      setPreviousValues(newValues);
       setMenuOpen(true);
-      toast(`Selected: ${countryName}`);
+      
+      // Generate initial country insight
+      try {
+        const insight = await generateCountryInsight(countryName, newValues);
+        showInsight(`Welcome to ${countryName}`, insight);
+      } catch (error) {
+        showInsight(`Welcome to ${countryName}`, `Welcome to ${countryName}! This country's development indicators show interesting patterns. Try adjusting the sliders to explore how different variables interact.`);
+      }
     }
   };
 
@@ -78,7 +131,9 @@ export default function Home() {
   }, []);
 
   // Memoized slider change handler
-  const handleSliderChange = useCallback((sliderId: string, value: number) => {
+  const handleSliderChange = useCallback(async (sliderId: string, value: number) => {
+    const oldValue = sliderValues[sliderId as keyof CountryStats] || 0;
+    
     setSliderValues(currentValues => {
       // Create updated values with the changed slider
       const updatedValues = {
@@ -109,9 +164,64 @@ export default function Home() {
       // Carbon emissions is always calculated, never constrained by slider
       finalValues.carbonEmissions = predicted.carbonEmissions;
       
+      // Update previous values for next comparison
+      setPreviousValues(currentValues);
+      
       return finalValues;
     });
-  }, [calculatePredictions]);
+
+    // Generate AI tip for the slider change
+    if (selectedCountry && Math.abs(value - oldValue) > 0.1) {
+      // Calculate the updated values that will be set
+      const updatedValues = {
+        ...sliderValues,
+        [sliderId]: value
+      };
+      const predicted = calculatePredictions(updatedValues, sliderId);
+      
+      // Apply constraints to get final values
+      const finalValues = { ...updatedValues };
+      if (sliderId !== 'lifeExpectancy') {
+        finalValues.lifeExpectancy = Math.max(50, Math.min(100, predicted.lifeExpectancy));
+      }
+      if (sliderId !== 'airQuality') {
+        finalValues.airQuality = Math.max(0, Math.min(100, predicted.airQuality));
+      }
+      if (sliderId !== 'waterQuality') {
+        finalValues.waterQuality = Math.max(0, Math.min(100, predicted.waterQuality));
+      }
+      if (sliderId !== 'populationGrowth') {
+        finalValues.populationGrowth = Math.max(-5, Math.min(5, predicted.populationGrowth));
+      }
+      if (sliderId !== 'gdp') {
+        finalValues.gdp = Math.max(0, Math.min(150000, predicted.gdp));
+      }
+      finalValues.carbonEmissions = predicted.carbonEmissions;
+
+      try {
+        const change: SliderChange = {
+          sliderId,
+          oldValue,
+          newValue: value,
+          countryName: selectedCountry,
+          allValues: finalValues
+        };
+        
+        const facts = await generateSliderFacts(change);
+        const sliderNames: { [key: string]: string } = {
+          lifeExpectancy: 'Life Expectancy',
+          airQuality: 'Air Quality',
+          waterQuality: 'Water Quality',
+          populationGrowth: 'Population Growth',
+          gdp: 'GDP per capita',
+          carbonEmissions: 'Carbon Emissions'
+        };
+        showFacts(`${sliderNames[sliderId]} Change`, facts);
+      } catch (error) {
+        console.error('Error generating tip:', error);
+      }
+    }
+  }, [calculatePredictions, sliderValues, selectedCountry]);
 
   const updateChart = (values: CountryStats) => {
     if (typeof window === 'undefined' || !(window as any).Plotly) return;
@@ -163,25 +273,31 @@ export default function Home() {
   };
 
   useEffect(() => {
-    // Update chart whenever slider values change
-    if (typeof window !== 'undefined' && (window as any).Plotly && selectedCountry) {
+    // Update chart whenever slider values change and chart is visible
+    if (typeof window !== 'undefined' && (window as any).Plotly && selectedCountry && showChart) {
       updateChart(sliderValues);
     }
-  }, [sliderValues, selectedCountry]);
+  }, [sliderValues, selectedCountry, showChart]);
 
   useEffect(() => {
-    // Initial chart render when Plotly loads
-    const timer = setTimeout(() => {
-      if (typeof window !== 'undefined' && (window as any).Plotly && selectedCountry) {
-        updateChart(sliderValues);
-      }
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [selectedCountry]);
+    // Initial chart render when Plotly loads and chart is shown
+    if (showChart && selectedCountry) {
+      const timer = setTimeout(() => {
+        if (typeof window !== 'undefined' && (window as any).Plotly) {
+          updateChart(sliderValues);
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedCountry, showChart, sliderValues]);
 
   return (
     <>
-      <Script src="https://cdn.plot.ly/plotly-latest.min.js" strategy="afterInteractive" onLoad={() => updateChart(sliderValues)} />
+      <Script src="https://cdn.plot.ly/plotly-latest.min.js" strategy="afterInteractive" onLoad={() => {
+        if (showChart && selectedCountry) {
+          updateChart(sliderValues);
+        }
+      }} />
       <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
       
       <style jsx global>{`
@@ -419,6 +535,29 @@ export default function Home() {
                 <span className="text-sm text-gray-500 mt-1 block">${sliderValues.gdp.toFixed(0)}</span>
               </div>
             </div>
+
+            {/* Chart Toggle Button */}
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowChart(!showChart)}
+                className="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                {showChart ? 'Hide Chart' : 'Show Predicted Values Chart'}
+              </button>
+            </div>
+
+            {/* Chart Section */}
+            {showChart && selectedCountry && (
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                  Interconnected Statistics
+                </h3>
+                <div id="chart" className="w-full h-64 bg-gray-50 rounded-lg p-2"></div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -447,19 +586,108 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Plotly Chart */}
-            {selectedCountry && (
-              <div className="bg-white rounded-xl shadow-lg p-6 sm:p-8">
-                <h2 className="text-xl font-bold text-gray-800 mb-4">
-                  Predicted Values for {selectedCountry}
-                </h2>
-                <div id="chart" className="w-full h-80 sm:h-96"></div>
-              </div>
-            )}
           </div>
         </div>
         
         <ToastContainer />
+        
+        {/* Insight Modal */}
+        {showInsightModal && (
+          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-blue-500/20 to-purple-600/20 backdrop-blur-sm border-b border-white/20 text-white p-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold text-white">{insightTitle}</h2>
+                  <button
+                    onClick={() => setShowInsightModal(false)}
+                    className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                {/* Step Indicator */}
+                {insightFacts.length > 4 && (
+                  <div className="mt-4 flex items-center justify-center space-x-2">
+                    {Array.from({ length: Math.ceil(insightFacts.length / 4) }).map((_, index) => (
+                      <div
+                        key={index}
+                        className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                          index === currentFactSet ? 'bg-white shadow-lg' : 'bg-white/30'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {/* Modal Content */}
+              <div className="p-8 overflow-y-auto max-h-[70vh]">
+                {insightFacts.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {getCurrentFacts().map((fact, index) => (
+                      <div
+                        key={index}
+                        className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-6 hover:bg-white/15 transition-all duration-300"
+                      >
+                        <div className="flex items-start space-x-4">
+                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                            {index + 1}
+                          </div>
+                          <p className="text-white/90 leading-relaxed text-sm">
+                            {fact}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-8">
+                    <p className="text-white/90 leading-relaxed text-lg whitespace-pre-wrap">
+                      {insightContent}
+                    </p>
+                  </div>
+                )}
+              </div>
+              
+              {/* Modal Footer */}
+              <div className="bg-white/5 backdrop-blur-sm border-t border-white/20 px-8 py-6 flex justify-between items-center">
+                <div className="flex space-x-3">
+                  {insightFacts.length > 4 && (
+                    <>
+                      <button
+                        onClick={prevFactSet}
+                        className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 border border-white/20 backdrop-blur-sm"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        Previous
+                      </button>
+                      <button
+                        onClick={nextFactSet}
+                        className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 border border-white/20 backdrop-blur-sm"
+                      >
+                        Next
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </>
+                  )}
+                </div>
+                <button
+                  onClick={() => setShowInsightModal(false)}
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-8 py-3 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl"
+                >
+                  Got it
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </>
   );

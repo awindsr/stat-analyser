@@ -7,7 +7,7 @@ export interface CountryStats {
   waterQuality: number;         // Index (0-100, higher is better)
   populationGrowth: number;     // Percentage (0-5%)
   gdp: number;                  // GDP per capita in USD
-  carbonEmissions?: number;    // Metric tons of CO2 per capita (calculated)
+  carbonEmissions: number;     // Metric tons of CO2 per capita (calculated)
 }
 
 export const countryData: Record<string, CountryStats> = {
@@ -190,12 +190,22 @@ export const countryData: Record<string, CountryStats> = {
 
 // Get country data or return default values
 export const getCountryData = (countryName: string): CountryStats => {
-  return countryData[countryName] || {
+  const data = countryData[countryName] || {
     lifeExpectancy: 75,
     airQuality: 50,
     waterQuality: 50,
     populationGrowth: 2,
     gdp: 25000
+  };
+  
+  // Calculate carbon emissions for the country
+  const carbonEmissions = -2772.8667 + 70.3028 * data.lifeExpectancy + 
+                         0.0762 * data.airQuality - 1.2057 * data.waterQuality - 
+                         281.6896 * data.populationGrowth - 0.1628 * data.gdp;
+  
+  return {
+    ...data,
+    carbonEmissions: carbonEmissions
   };
 };
 
