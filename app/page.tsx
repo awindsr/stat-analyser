@@ -130,18 +130,37 @@ export default function Home() {
       return -2772.8667 + 70.3028 * lifeExpectancy + 0.0762 * airQuality - 1.2057 * waterQuality - 281.6896 * populationGrowth - 0.1628 * gdp;
     };
 
-    // Calculate carbon emissions first (always calculated, never a source)
-    const carbonEmissions = predictCarbonEmissions(values.lifeExpectancy, values.airQuality, values.waterQuality, values.populationGrowth, values.gdp);
+    // Start with current values
+    let result = { ...values };
+    
+    // Iteratively solve the system of equations (3 iterations for convergence)
+    for (let iteration = 0; iteration < 3; iteration++) {
+      // Calculate carbon emissions with current values
+      const carbonEmissions = predictCarbonEmissions(
+        result.lifeExpectancy,
+        result.airQuality,
+        result.waterQuality,
+        result.populationGrowth,
+        result.gdp
+      );
 
-    // Calculate predicted values
-    return {
-      lifeExpectancy: sourceSliderId === 'lifeExpectancy' ? values.lifeExpectancy : predictLifeExpectancy(values.airQuality, values.waterQuality, values.populationGrowth, values.gdp, carbonEmissions),
-      airQuality: sourceSliderId === 'airQuality' ? values.airQuality : predictAirQuality(values.lifeExpectancy, values.waterQuality, values.populationGrowth, values.gdp, carbonEmissions),
-      waterQuality: sourceSliderId === 'waterQuality' ? values.waterQuality : predictWaterQuality(values.lifeExpectancy, values.airQuality, values.populationGrowth, values.gdp, carbonEmissions),
-      populationGrowth: sourceSliderId === 'populationGrowth' ? values.populationGrowth : predictPopulationGrowth(values.lifeExpectancy, values.airQuality, values.waterQuality, values.gdp, carbonEmissions),
-      gdp: sourceSliderId === 'gdp' ? values.gdp : predictGDP(values.lifeExpectancy, values.airQuality, values.waterQuality, values.populationGrowth, carbonEmissions),
-      carbonEmissions: carbonEmissions
-    };
+      // Update each value (except the source slider)
+      result = {
+        lifeExpectancy: sourceSliderId === 'lifeExpectancy' ? values.lifeExpectancy : 
+          predictLifeExpectancy(result.airQuality, result.waterQuality, result.populationGrowth, result.gdp, carbonEmissions),
+        airQuality: sourceSliderId === 'airQuality' ? values.airQuality : 
+          predictAirQuality(result.lifeExpectancy, result.waterQuality, result.populationGrowth, result.gdp, carbonEmissions),
+        waterQuality: sourceSliderId === 'waterQuality' ? values.waterQuality : 
+          predictWaterQuality(result.lifeExpectancy, result.airQuality, result.populationGrowth, result.gdp, carbonEmissions),
+        populationGrowth: sourceSliderId === 'populationGrowth' ? values.populationGrowth : 
+          predictPopulationGrowth(result.lifeExpectancy, result.airQuality, result.waterQuality, result.gdp, carbonEmissions),
+        gdp: sourceSliderId === 'gdp' ? values.gdp : 
+          predictGDP(result.lifeExpectancy, result.airQuality, result.waterQuality, result.populationGrowth, carbonEmissions),
+        carbonEmissions: carbonEmissions
+      };
+    }
+
+    return result;
   }, []);
 
   // Memoized slider change handler
@@ -605,7 +624,7 @@ export default function Home() {
                 </div>
 
             {/* Chart Toggle Button */}
-            <div className="mt-8 pt-6 border-t border-gray-200">
+            {/* <div className="mt-8 pt-6 border-t border-gray-200">
               <button
                 onClick={() => setShowChart(!showChart)}
                 className="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
@@ -615,17 +634,17 @@ export default function Home() {
                 </svg>
                 {showChart ? 'Hide Chart' : 'Show Predicted Values Chart'}
               </button>
-            </div>
+            </div> */}
 
             {/* Chart Section */}
-            {showChart && selectedCountry && (
+            {/* {showChart && selectedCountry && (
               <div className="mt-6 pt-6 border-t border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">
                   Interconnected Statistics
                 </h3>
                 <div id="chart" className="w-full h-64 bg-gray-50 rounded-lg p-2"></div>
               </div>
-            )}
+            )} */}
           </>
         ) : (
           <div className="p-6 pt-20">
