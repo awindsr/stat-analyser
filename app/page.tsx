@@ -35,19 +35,21 @@ export default function Home() {
   const [currentFactSet, setCurrentFactSet] = useState(0);
   const [sliderFactsCache, setSliderFactsCache] = useState<{ [key: string]: string[] }>({});
 
-  const showInsight = (title: string, content: string) => {
+  // Show insight modal with content based on current values
+  const showInsight = async (title: string) => {
+    const insight = await generateCountryInsight(selectedCountry, sliderValues);
     setInsightTitle(title);
-    setInsightContent(content);
+    setInsightContent(insight);
     setInsightFacts([]);
-    setCurrentFactSet(0);
     setShowInsightModal(true);
   };
 
-  const showFacts = (title: string, facts: string[]) => {
+  // Show facts modal based on current values
+  const showFacts = async (title: string, sliderId: number) => {
+    const facts = await generateSliderFacts(sliderId, sliderValues);
     setInsightTitle(title);
     setInsightFacts(facts);
     setInsightContent('');
-    setCurrentFactSet(0);
     setShowInsightModal(true);
   };
 
@@ -75,7 +77,7 @@ export default function Home() {
     
     const cachedFacts = sliderFactsCache[sliderId];
     if (cachedFacts && cachedFacts.length > 0) {
-      showFacts(`${sliderNames[sliderId]} Insights`, cachedFacts);
+      showFacts(`${sliderNames[sliderId]} Insights`, sliderId);
     } else {
       showInsight(
         `${sliderNames[sliderId]}`,
@@ -194,8 +196,8 @@ export default function Home() {
       if (sliderId !== 'gdp') {
         finalValues.gdp = Math.max(0, Math.min(150000, predicted.gdp));
       }
-      // Carbon emissions is always calculated, never constrained by slider
-      finalValues.carbonEmissions = predicted.carbonEmissions;
+  // Carbon emissions is always calculated, but must never be negative
+  finalValues.carbonEmissions = Math.max(0, predicted.carbonEmissions ?? 0);
       
       // Update previous values for next comparison
       setPreviousValues(currentValues);
@@ -689,17 +691,17 @@ export default function Home() {
         
         {/* Insight Modal */}
         {showInsightModal && (
-          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white/90 rounded-2xl shadow-xl max-w-xl w-full max-h-[80vh] overflow-hidden transition-all duration-300">
               {/* Modal Header */}
               <div className="bg-gradient-to-r from-blue-500/20 to-purple-600/20 backdrop-blur-sm border-b border-white/20 text-white p-6">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-white">{insightTitle}</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 tracking-tight">{insightTitle}</h2>
                   <button
                     onClick={() => setShowInsightModal(false)}
-                    className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10"
+                    className="text-gray-400 hover:text-gray-700 transition-colors p-2 rounded-full"
                   >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
@@ -722,26 +724,24 @@ export default function Home() {
               {/* Modal Content */}
               <div className="p-8 overflow-y-auto max-h-[70vh]">
                 {insightFacts.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
                     {getCurrentFacts().map((fact, index) => (
                       <div
                         key={index}
-                        className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-6 hover:bg-white/15 transition-all duration-300"
+                        className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-start gap-3"
                       >
-                        <div className="flex items-start space-x-4">
-                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                            {index + 1}
-                          </div>
-                          <div className="text-white/90 leading-relaxed text-sm prose prose-invert prose-sm max-w-none">
-                            <ReactMarkdown>{fact}</ReactMarkdown>
-                          </div>
+                        <div className="flex-shrink-0 w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 font-semibold text-sm">
+                          {index + 1}
+                        </div>
+                        <div className="text-gray-800 leading-relaxed text-base">
+                          <ReactMarkdown>{fact}</ReactMarkdown>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-8">
-                    <div className="text-white/90 leading-relaxed text-lg prose prose-invert prose-lg max-w-none">
+                  <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
+                    <div className="text-gray-800 leading-relaxed text-lg">
                       <ReactMarkdown>{insightContent}</ReactMarkdown>
                     </div>
                   </div>
@@ -749,22 +749,22 @@ export default function Home() {
               </div>
               
               {/* Modal Footer */}
-              <div className="bg-white/5 backdrop-blur-sm border-t border-white/20 px-8 py-6 flex justify-between items-center">
-                <div className="flex space-x-3">
+              <div className="border-t px-6 py-4 flex justify-between items-center bg-white rounded-b-2xl">
+                <div className="flex gap-2">
                   {insightFacts.length > 4 && (
                     <>
                       <button
                         onClick={prevFactSet}
-                        className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 border border-white/20 backdrop-blur-sm"
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-all duration-200 border border-gray-200"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
-                        Previous
+                        Prev
                       </button>
                       <button
                         onClick={nextFactSet}
-                        className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 border border-white/20 backdrop-blur-sm"
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-all duration-200 border border-gray-200"
                       >
                         Next
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -776,9 +776,9 @@ export default function Home() {
                 </div>
                 <button
                   onClick={() => setShowInsightModal(false)}
-                  className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-8 py-3 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl"
+                  className="bg-gray-900 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-all duration-200 shadow"
                 >
-                  Got it
+                  Close
                 </button>
               </div>
             </div>
