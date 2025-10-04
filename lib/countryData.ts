@@ -7,6 +7,7 @@ export interface CountryStats {
   waterQuality: number;         // Index (0-100, higher is better)
   populationGrowth: number;     // Percentage (0-5%)
   gdp: number;                  // GDP per capita in USD
+  carbonEmissions?: number;    // Metric tons of CO2 per capita (calculated)
 }
 
 export const countryData: Record<string, CountryStats> = {
