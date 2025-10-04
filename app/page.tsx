@@ -33,6 +33,7 @@ export default function Home() {
   const [insightTitle, setInsightTitle] = useState('');
   const [insightFacts, setInsightFacts] = useState<string[]>([]);
   const [currentFactSet, setCurrentFactSet] = useState(0);
+  const [sliderFactsCache, setSliderFactsCache] = useState<{ [key: string]: string[] }>({});
 
   const showInsight = (title: string, content: string) => {
     setInsightTitle(title);
@@ -61,6 +62,26 @@ export default function Home() {
   const getCurrentFacts = () => {
     const startIndex = currentFactSet * 4;
     return insightFacts.slice(startIndex, startIndex + 4);
+  };
+
+  const handleInfoButtonClick = (sliderId: string) => {
+    const sliderNames: { [key: string]: string } = {
+      lifeExpectancy: 'Life Expectancy',
+      airQuality: 'Air Quality',
+      waterQuality: 'Water Quality',
+      populationGrowth: 'Population Growth',
+      gdp: 'GDP per capita'
+    };
+    
+    const cachedFacts = sliderFactsCache[sliderId];
+    if (cachedFacts && cachedFacts.length > 0) {
+      showFacts(`${sliderNames[sliderId]} Insights`, cachedFacts);
+    } else {
+      showInsight(
+        `${sliderNames[sliderId]}`,
+        `Adjust the ${sliderNames[sliderId]} slider to see how it affects other variables and generate insights about the changes.`
+      );
+    }
   };
 
   const handleCountrySelect = async (countryName: string | null) => {
@@ -163,7 +184,7 @@ export default function Home() {
       return finalValues;
     });
 
-    // Generate AI tip for the slider change
+    // Generate and cache AI facts for the slider change (but don't show modal)
     if (selectedCountry && Math.abs(value - oldValue) > 0.1) {
       // Calculate the updated values that will be set
       const updatedValues = {
@@ -189,7 +210,7 @@ export default function Home() {
       if (sliderId !== 'gdp') {
         finalValues.gdp = Math.max(0, Math.min(150000, predicted.gdp));
       }
-      finalValues.carbonEmissions = predicted.carbonEmissions;
+      finalValues.carbonEmissions = predicted.carbonEmissions || 0;
 
       try {
         const change: SliderChange = {
@@ -197,21 +218,17 @@ export default function Home() {
           oldValue,
           newValue: value,
           countryName: selectedCountry,
-          allValues: finalValues
+          allValues: finalValues as Required<CountryStats>
         };
         
         const facts = await generateSliderFacts(change);
-        const sliderNames: { [key: string]: string } = {
-          lifeExpectancy: 'Life Expectancy',
-          airQuality: 'Air Quality',
-          waterQuality: 'Water Quality',
-          populationGrowth: 'Population Growth',
-          gdp: 'GDP per capita',
-          carbonEmissions: 'Carbon Emissions'
-        };
-        showFacts(`${sliderNames[sliderId]} Change`, facts);
+        // Cache the facts instead of showing them
+        setSliderFactsCache(prev => ({
+          ...prev,
+          [sliderId]: facts
+        }));
       } catch (error) {
-        console.error('Error generating tip:', error);
+        console.error('Error generating facts:', error);
       }
     }
   }, [calculatePredictions, sliderValues, selectedCountry]);
@@ -372,9 +389,10 @@ export default function Home() {
 
         {/* Side Menu */}
         <div
-          className={`fixed top-0 right-0 h-full w-full sm:w-96 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out z-40 overflow-y-auto ${
+          className={`fixed top-0 right-0 h-full bg-white shadow-2xl transform transition-transform duration-300 ease-in-out z-40 overflow-y-auto ${
             menuOpen ? 'translate-x-0' : 'translate-x-full'
           }`}
+          style={{ width: '70vw' }}
         >
           <div className="p-6 pt-20">
             {/* Country Header */}
@@ -385,68 +403,79 @@ export default function Home() {
                   <p className="text-sm text-gray-500">Adjust statistical variables</p>
                 </div>
                 
-                {/* Carbon Emissions Display - Prominent */}
-                <div className="mb-6 bg-gradient-to-r from-red-500 to-orange-500 rounded-lg p-6 shadow-lg">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-white text-sm font-medium mb-1">Carbon Emissions</h3>
-                      <p className="text-white/80 text-xs">Metric tons CO₂ per capita</p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-white text-3xl font-bold">
-                        {(sliderValues.carbonEmissions || 0).toFixed(2)}
+                {/* Two Column Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Left Column - Stats and Carbon Emissions */}
+                  <div className="space-y-6">
+                    {/* Carbon Emissions Display - Prominent */}
+                    <div className="bg-gradient-to-r from-red-500 to-orange-500 rounded-lg p-6 shadow-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-white text-sm font-medium mb-1">Carbon Emissions</h3>
+                          <p className="text-white/80 text-xs">Metric tons CO₂ per capita</p>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-white text-3xl font-bold">
+                            {(sliderValues.carbonEmissions || 0).toFixed(2)}
+                          </div>
+                          <div className="text-white/80 text-xs mt-1">tons/capita</div>
+                        </div>
                       </div>
-                      <div className="text-white/80 text-xs mt-1">tons/capita</div>
+                      <div className="mt-3 pt-3 border-t border-white/20">
+                        <p className="text-white/90 text-xs">
+                          This value is calculated based on the relationships between all other variables.
+                          Adjust the sliders to see how they affect carbon emissions.
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Current Statistics Summary */}
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Current Statistics</h3>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="bg-white rounded p-2">
+                          <div className="text-gray-500">Life Expectancy</div>
+                          <div className="font-bold text-blue-600">{sliderValues.lifeExpectancy.toFixed(1)} yrs</div>
+                        </div>
+                        <div className="bg-white rounded p-2">
+                          <div className="text-gray-500">Air Quality</div>
+                          <div className="font-bold text-blue-600">{sliderValues.airQuality.toFixed(1)}/100</div>
+                        </div>
+                        <div className="bg-white rounded p-2">
+                          <div className="text-gray-500">Water Quality</div>
+                          <div className="font-bold text-blue-600">{sliderValues.waterQuality.toFixed(1)}/100</div>
+                        </div>
+                        <div className="bg-white rounded p-2">
+                          <div className="text-gray-500">Pop. Growth</div>
+                          <div className="font-bold text-blue-600">{sliderValues.populationGrowth.toFixed(2)}%</div>
+                        </div>
+                        <div className="bg-white rounded p-2 col-span-2">
+                          <div className="text-gray-500">GDP per capita</div>
+                          <div className="font-bold text-blue-600">${sliderValues.gdp.toFixed(0)}</div>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="mt-3 pt-3 border-t border-white/20">
-                    <p className="text-white/90 text-xs">
-                      This value is calculated based on the relationships between all other variables.
-                      Adjust the sliders below to see how they affect carbon emissions.
-                    </p>
-                  </div>
-                </div>
-                
-                {/* Current Statistics Summary */}
-                <div className="mb-6 bg-blue-50 rounded-lg p-4">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Current Statistics</h3>
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div className="bg-white rounded p-2">
-                      <div className="text-gray-500">Life Expectancy</div>
-                      <div className="font-bold text-blue-600">{sliderValues.lifeExpectancy.toFixed(1)} yrs</div>
-                    </div>
-                    <div className="bg-white rounded p-2">
-                      <div className="text-gray-500">Air Quality</div>
-                      <div className="font-bold text-blue-600">{sliderValues.airQuality.toFixed(1)}/100</div>
-                    </div>
-                    <div className="bg-white rounded p-2">
-                      <div className="text-gray-500">Water Quality</div>
-                      <div className="font-bold text-blue-600">{sliderValues.waterQuality.toFixed(1)}/100</div>
-                    </div>
-                    <div className="bg-white rounded p-2">
-                      <div className="text-gray-500">Pop. Growth</div>
-                      <div className="font-bold text-blue-600">{sliderValues.populationGrowth.toFixed(2)}%</div>
-                    </div>
-                    <div className="bg-white rounded p-2 col-span-2">
-                      <div className="text-gray-500">GDP per capita</div>
-                      <div className="font-bold text-blue-600">${sliderValues.gdp.toFixed(0)}</div>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="mb-6 pb-4 border-b border-gray-200">
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">No Country Selected</h2>
-                <p className="text-sm text-gray-500">Select a country from the map to view and adjust its data</p>
-              </div>
-            )}
-            
-            {/* Sliders */}
-            <div className="grid grid-cols-1 gap-6">
+                  
+                  {/* Right Column - Sliders */}
+                  <div className="space-y-6">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Adjust Variables</h3>
+                    <div className="grid grid-cols-1 gap-6">
               <div>
-                <label htmlFor="lifeExpectancy" className="block text-sm font-medium text-gray-700 mb-2">
-                  Life Expectancy (50–100 years)
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label htmlFor="lifeExpectancy" className="block text-sm font-medium text-gray-700">
+                    Life Expectancy (50–100 years)
+                  </label>
+                  <button
+                    onClick={() => handleInfoButtonClick('lifeExpectancy')}
+                    className="text-blue-500 hover:text-blue-700 transition-colors p-1 rounded-full hover:bg-blue-50"
+                    title="View insights"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
                 <input
                   type="range"
                   id="lifeExpectancy"
@@ -461,9 +490,20 @@ export default function Home() {
               </div>
 
               <div>
-                <label htmlFor="airQuality" className="block text-sm font-medium text-gray-700 mb-2">
-                  Air Quality (0–100)
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label htmlFor="airQuality" className="block text-sm font-medium text-gray-700">
+                    Air Quality (0–100)
+                  </label>
+                  <button
+                    onClick={() => handleInfoButtonClick('airQuality')}
+                    className="text-blue-500 hover:text-blue-700 transition-colors p-1 rounded-full hover:bg-blue-50"
+                    title="View insights"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
                 <input
                   type="range"
                   id="airQuality"
@@ -478,9 +518,20 @@ export default function Home() {
               </div>
 
               <div>
-                <label htmlFor="waterQuality" className="block text-sm font-medium text-gray-700 mb-2">
-                  Water Quality (0–100)
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label htmlFor="waterQuality" className="block text-sm font-medium text-gray-700">
+                    Water Quality (0–100)
+                  </label>
+                  <button
+                    onClick={() => handleInfoButtonClick('waterQuality')}
+                    className="text-blue-500 hover:text-blue-700 transition-colors p-1 rounded-full hover:bg-blue-50"
+                    title="View insights"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
                 <input
                   type="range"
                   id="waterQuality"
@@ -495,9 +546,20 @@ export default function Home() {
               </div>
 
               <div>
-                <label htmlFor="populationGrowth" className="block text-sm font-medium text-gray-700 mb-2">
-                  Population Growth (-5–5%)
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label htmlFor="populationGrowth" className="block text-sm font-medium text-gray-700">
+                    Population Growth (-5–5%)
+                  </label>
+                  <button
+                    onClick={() => handleInfoButtonClick('populationGrowth')}
+                    className="text-blue-500 hover:text-blue-700 transition-colors p-1 rounded-full hover:bg-blue-50"
+                    title="View insights"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
                 <input
                   type="range"
                   id="populationGrowth"
@@ -512,9 +574,20 @@ export default function Home() {
               </div>
 
               <div>
-                <label htmlFor="gdp" className="block text-sm font-medium text-gray-700 mb-2">
-                  GDP per capita (0–150000 USD)
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label htmlFor="gdp" className="block text-sm font-medium text-gray-700">
+                    GDP per capita (0–150000 USD)
+                  </label>
+                  <button
+                    onClick={() => handleInfoButtonClick('gdp')}
+                    className="text-blue-500 hover:text-blue-700 transition-colors p-1 rounded-full hover:bg-blue-50"
+                    title="View insights"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
                 <input
                   type="range"
                   id="gdp"
@@ -528,6 +601,8 @@ export default function Home() {
                 <span className="text-sm text-gray-500 mt-1 block">${sliderValues.gdp.toFixed(0)}</span>
               </div>
             </div>
+                  </div>
+                </div>
 
             {/* Chart Toggle Button */}
             <div className="mt-8 pt-6 border-t border-gray-200">
@@ -551,6 +626,15 @@ export default function Home() {
                 <div id="chart" className="w-full h-64 bg-gray-50 rounded-lg p-2"></div>
               </div>
             )}
+          </>
+        ) : (
+          <div className="p-6 pt-20">
+            <div className="mb-6 pb-4 border-b border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">No Country Selected</h2>
+              <p className="text-sm text-gray-500">Select a country from the map to view and adjust its data</p>
+            </div>
+          </div>
+        )}
           </div>
         </div>
 
