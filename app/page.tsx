@@ -630,10 +630,10 @@ Please check your API key configuration or try again later.`;
                           <div className="text-gray-500">Life Expectancy</div>
                           <div className="font-bold text-blue-600">{sliderValues.lifeExpectancy.toFixed(1)} yrs</div>
                         </div>
-                        <div className="bg-white rounded p-2">
+                        {/* <div className="bg-white rounded p-2">
                           <div className="text-gray-500">Air Quality</div>
                           <div className="font-bold text-blue-600">{sliderValues.airQuality.toFixed(1)}/100</div>
-                        </div>
+                        </div> */}
                         <div className="bg-white rounded p-2">
                           <div className="text-gray-500">Water Quality</div>
                           <div className="font-bold text-blue-600">{sliderValues.waterQuality.toFixed(1)}/100</div>
@@ -682,7 +682,7 @@ Please check your API key configuration or try again later.`;
                 <span className="text-sm text-gray-500 mt-1 block">{sliderValues.lifeExpectancy.toFixed(1)}</span>
               </div>
 
-              <div>
+              {/* <div>
                 <div className="flex items-center justify-between mb-2">
                   <label htmlFor="airQuality" className="block text-sm font-medium text-gray-700">
                     Air Quality (0–100)
@@ -708,7 +708,7 @@ Please check your API key configuration or try again later.`;
                   onChange={(e) => handleSliderChange('airQuality', parseFloat(e.target.value))}
                 />
                 <span className="text-sm text-gray-500 mt-1 block">{sliderValues.airQuality.toFixed(1)}</span>
-              </div>
+              </div> */}
 
               <div>
                 <div className="flex items-center justify-between mb-2">
