@@ -280,7 +280,7 @@ Please check your API key configuration or try again later.`;
 
     // AirQuality: R² = 0.9118, RMSE = 4.9179
     const predictAirQuality = (lifeExpectancy: number, waterQuality: number, populationGrowth: number, gdp: number, carbonEmissions: number) => {
-      return 54.1191 + 4.7854 * lifeExpectancy + 0.8415 * waterQuality - 35.9174 * populationGrowth - 0.0287 * gdp - 37.8872 * carbonEmissions;
+      return -54.1191 + 4.7854 * lifeExpectancy + 0.8415 * waterQuality - 35.9174 * populationGrowth - 0.0287 * gdp - 37.8872 * carbonEmissions;
     };
 
     // WaterQuality: R² = 0.9834, RMSE = 1.1886
