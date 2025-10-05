@@ -272,35 +272,26 @@ Please check your API key configuration or try again later.`;
 
   // Memoized prediction calculation function
   const calculatePredictions = useCallback((values: CountryStats, sourceSliderId: string) => {
-    // Updated Linear Regression equations with improved accuracy
-    // LifeExpectancy: R² = 0.9908, RMSE = 0.5735
-    const predictLifeExpectancy = (airQuality: number, waterQuality: number, populationGrowth: number, gdp: number, carbonEmissions: number) => {
-      return 56.8587 + 0.0242 * airQuality + 0.1480 * waterQuality - 5.8920 * populationGrowth + 0.0003 * gdp + 2.1097 * carbonEmissions;
+    // Updated Linear Regression equations (Air Quality and Water Quality removed)
+    
+    // LifeExpectancy = 76.3797 - 5.1919 * PopulationGrowth + 0.0001 * GDP + 0.1670 * CarbonEmissions
+    const predictLifeExpectancy = (populationGrowth: number, gdp: number, carbonEmissions: number) => {
+      return 76.3797 - 5.1919 * populationGrowth + 0.0001 * gdp + 0.1670 * carbonEmissions;
     };
 
-    // AirQuality: R² = 0.9118, RMSE = 4.9179
-    const predictAirQuality = (lifeExpectancy: number, waterQuality: number, populationGrowth: number, gdp: number, carbonEmissions: number) => {
-      return -54.1191 + 4.7854 * lifeExpectancy + 0.8415 * waterQuality - 35.9174 * populationGrowth - 0.0287 * gdp - 37.8872 * carbonEmissions;
+    // PopulationGrowth = 6.0091 - 0.0000 * GDP - 0.0535 * LifeExpectancy - 0.0465 * CarbonEmissions
+    const predictPopulationGrowth = (lifeExpectancy: number, gdp: number, carbonEmissions: number) => {
+      return 6.0091 - 0.0535 * lifeExpectancy - 0.0000 * gdp - 0.0465 * carbonEmissions;
     };
 
-    // WaterQuality: R² = 0.9834, RMSE = 1.1886
-    const predictWaterQuality = (lifeExpectancy: number, airQuality: number, populationGrowth: number, gdp: number, carbonEmissions: number) => {
-      return -45.6846 + 1.3958 * lifeExpectancy + 0.0402 * airQuality + 2.8796 * populationGrowth + 0.0025 * gdp - 1.0669 * carbonEmissions;
+    // GDP = -38817.3098 - 3922.7594 * PopulationGrowth + 798.1844 * LifeExpectancy + 546.9315 * CarbonEmissions
+    const predictGDP = (lifeExpectancy: number, populationGrowth: number, carbonEmissions: number) => {
+      return -38817.3098 + 798.1844 * lifeExpectancy - 3922.7594 * populationGrowth + 546.9315 * carbonEmissions;
     };
 
-    // PopulationGrowth: R² = 0.9824, RMSE = 0.0673
-    const predictPopulationGrowth = (lifeExpectancy: number, airQuality: number, waterQuality: number, gdp: number, carbonEmissions: number) => {
-      return 5.9622 - 0.0653 * lifeExpectancy - 0.0020 * airQuality + 0.0034 * waterQuality - 0.0001 * gdp - 0.1377 * carbonEmissions;
-    };
-
-    // GDP: R² = 0.9808, RMSE = 175.8388
-    const predictGDP = (lifeExpectancy: number, airQuality: number, waterQuality: number, populationGrowth: number, carbonEmissions: number) => {
-      return 1866.1816 + 40.9855 * lifeExpectancy - 23.4287 * airQuality + 41.9644 * waterQuality - 1096.3512 * populationGrowth - 80.3414 * carbonEmissions;
-    };
-
-    // CarbonEmissions: R² = 0.9938, RMSE = 0.0457
-    const predictCarbonEmissions = (lifeExpectancy: number, airQuality: number, waterQuality: number, populationGrowth: number, gdp: number) => {
-      return -1.4064 + 0.0693 * lifeExpectancy - 0.0063 * airQuality - 0.0037 * waterQuality - 0.4083 * populationGrowth - 0.0000 * gdp;
+    // CarbonEmissions = 4.0892 - 4.4772 * PopulationGrowth + 0.0001 * GDP + 0.1657 * LifeExpectancy
+    const predictCarbonEmissions = (lifeExpectancy: number, populationGrowth: number, gdp: number) => {
+      return 4.0892 + 0.1657 * lifeExpectancy - 4.4772 * populationGrowth + 0.0001 * gdp;
     };
 
     // Start with current values
@@ -311,8 +302,6 @@ Please check your API key configuration or try again later.`;
       // Calculate carbon emissions with current values
       const carbonEmissions = predictCarbonEmissions(
         result.lifeExpectancy,
-        result.airQuality,
-        result.waterQuality,
         result.populationGrowth,
         result.gdp
       );
@@ -320,15 +309,13 @@ Please check your API key configuration or try again later.`;
       // Update each value (except the source slider)
       result = {
         lifeExpectancy: sourceSliderId === 'lifeExpectancy' ? values.lifeExpectancy : 
-          predictLifeExpectancy(result.airQuality, result.waterQuality, result.populationGrowth, result.gdp, carbonEmissions),
-        airQuality: sourceSliderId === 'airQuality' ? values.airQuality : 
-          predictAirQuality(result.lifeExpectancy, result.waterQuality, result.populationGrowth, result.gdp, carbonEmissions),
-        waterQuality: sourceSliderId === 'waterQuality' ? values.waterQuality : 
-          predictWaterQuality(result.lifeExpectancy, result.airQuality, result.populationGrowth, result.gdp, carbonEmissions),
+          predictLifeExpectancy(result.populationGrowth, result.gdp, carbonEmissions),
+        airQuality: values.airQuality, // Keep original value, not predicted
+        waterQuality: values.waterQuality, // Keep original value, not predicted
         populationGrowth: sourceSliderId === 'populationGrowth' ? values.populationGrowth : 
-          predictPopulationGrowth(result.lifeExpectancy, result.airQuality, result.waterQuality, result.gdp, carbonEmissions),
+          predictPopulationGrowth(result.lifeExpectancy, result.gdp, carbonEmissions),
         gdp: sourceSliderId === 'gdp' ? values.gdp : 
-          predictGDP(result.lifeExpectancy, result.airQuality, result.waterQuality, result.populationGrowth, carbonEmissions),
+          predictGDP(result.lifeExpectancy, result.populationGrowth, carbonEmissions),
         carbonEmissions: carbonEmissions
       };
     }
@@ -350,25 +337,23 @@ Please check your API key configuration or try again later.`;
       // Calculate predictions for other sliders
       const predicted = calculatePredictions(updatedValues, sliderId);
       
-      // Apply constraints and predictions
+      // Apply constraints and predictions (Air Quality and Water Quality not predicted anymore)
       const finalValues = { ...updatedValues };
       if (sliderId !== 'lifeExpectancy') {
         finalValues.lifeExpectancy = Math.max(50, Math.min(100, predicted.lifeExpectancy));
       }
-      if (sliderId !== 'airQuality') {
-        finalValues.airQuality = Math.max(0, Math.min(100, predicted.airQuality));
-      }
-      if (sliderId !== 'waterQuality') {
-        finalValues.waterQuality = Math.max(0, Math.min(100, predicted.waterQuality));
-      }
+      // Air Quality and Water Quality are kept as-is from user input
+      finalValues.airQuality = updatedValues.airQuality;
+      finalValues.waterQuality = updatedValues.waterQuality;
+      
       if (sliderId !== 'populationGrowth') {
         finalValues.populationGrowth = Math.max(-5, Math.min(5, predicted.populationGrowth));
       }
       if (sliderId !== 'gdp') {
         finalValues.gdp = Math.max(0, Math.min(150000, predicted.gdp));
       }
-  // Carbon emissions is always calculated, but must never be negative
-  finalValues.carbonEmissions = Math.max(0, predicted.carbonEmissions ?? 0);
+      // Carbon emissions is always calculated, but must never be negative
+      finalValues.carbonEmissions = Math.max(0, predicted.carbonEmissions ?? 0);
       
       // Update previous values for next comparison
       setPreviousValues(currentValues);
@@ -385,17 +370,15 @@ Please check your API key configuration or try again later.`;
       };
       const predicted = calculatePredictions(updatedValues, sliderId);
       
-      // Apply constraints to get final values
+      // Apply constraints to get final values (Air Quality and Water Quality not predicted)
       const finalValues = { ...updatedValues };
       if (sliderId !== 'lifeExpectancy') {
         finalValues.lifeExpectancy = Math.max(50, Math.min(100, predicted.lifeExpectancy));
       }
-      if (sliderId !== 'airQuality') {
-        finalValues.airQuality = Math.max(0, Math.min(100, predicted.airQuality));
-      }
-      if (sliderId !== 'waterQuality') {
-        finalValues.waterQuality = Math.max(0, Math.min(100, predicted.waterQuality));
-      }
+      // Air Quality and Water Quality are kept as-is from user input
+      finalValues.airQuality = updatedValues.airQuality;
+      finalValues.waterQuality = updatedValues.waterQuality;
+      
       if (sliderId !== 'populationGrowth') {
         finalValues.populationGrowth = Math.max(-5, Math.min(5, predicted.populationGrowth));
       }
@@ -710,7 +693,7 @@ Please check your API key configuration or try again later.`;
                 <span className="text-sm text-gray-500 mt-1 block">{sliderValues.airQuality.toFixed(1)}</span>
               </div> */}
 
-              <div>
+              {/* <div>
                 <div className="flex items-center justify-between mb-2">
                   <label htmlFor="waterQuality" className="block text-sm font-medium text-gray-700">
                     Water Quality (0–100)
@@ -736,7 +719,7 @@ Please check your API key configuration or try again later.`;
                   onChange={(e) => handleSliderChange('waterQuality', parseFloat(e.target.value))}
                 />
                 <span className="text-sm text-gray-500 mt-1 block">{sliderValues.waterQuality.toFixed(1)}</span>
-              </div>
+              </div> */}
 
               <div>
                 <div className="flex items-center justify-between mb-2">
