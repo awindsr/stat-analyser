@@ -617,10 +617,10 @@ Please check your API key configuration or try again later.`;
                           <div className="text-gray-500">Air Quality</div>
                           <div className="font-bold text-blue-600">{sliderValues.airQuality.toFixed(1)}/100</div>
                         </div> */}
-                        <div className="bg-white rounded p-2">
+                        {/* <div className="bg-white rounded p-2">
                           <div className="text-gray-500">Water Quality</div>
                           <div className="font-bold text-blue-600">{sliderValues.waterQuality.toFixed(1)}/100</div>
-                        </div>
+                        </div> */}
                         <div className="bg-white rounded p-2">
                           <div className="text-gray-500">Pop. Growth</div>
                           <div className="font-bold text-blue-600">{sliderValues.populationGrowth.toFixed(2)}%</div>
