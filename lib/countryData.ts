@@ -199,11 +199,11 @@ export const getCountryData = (countryName: string): CountryStats => {
     carbonEmissions: 5.0
   };
   
-  // If carbon emissions is not defined, calculate it using the formula
+  // If carbon emissions is not defined, calculate it using the updated formula
   if (data.carbonEmissions === undefined) {
-    const carbonEmissions = 2772.8667 + 70.3028 * data.lifeExpectancy + 
-                           0.0762 * data.airQuality - 1.2057 * data.waterQuality - 
-                           281.6896 * data.populationGrowth - 0.1628 * data.gdp;
+    // Updated Linear Regression formula: R² = 0.9938, RMSE = 0.0457
+    const carbonEmissions = -1.4064 + 0.0693 * data.lifeExpectancy - 0.0063 * data.airQuality - 
+                           0.0037 * data.waterQuality - 0.4083 * data.populationGrowth - 0.0000 * data.gdp;
     
     return {
       ...data,

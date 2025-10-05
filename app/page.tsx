@@ -257,15 +257,12 @@ Please check your API key configuration or try again later.`;
   const handleCountrySelect = async (countryName: string | null) => {
     if (countryName) {
       setSelectedCountry(countryName);
-      // Load country-specific data
+      // Load country-specific data (includes actual carbon emissions per capita)
       const countryStats = getCountryData(countryName);
-      // Calculate carbon emissions for the country
-      const carbonEmissions = 2772.8667 + 70.3028 * countryStats.lifeExpectancy + 
-                             0.0762 * countryStats.airQuality - 1.2057 * countryStats.waterQuality - 
-                             281.6896 * countryStats.populationGrowth - 0.1628 * countryStats.gdp;
+      // Use the actual carbon emissions data from countryData
       const newValues = {
         ...countryStats,
-        carbonEmissions: carbonEmissions
+        carbonEmissions: countryStats.carbonEmissions || 0
       };
       setSliderValues(newValues);
       setPreviousValues(newValues);
@@ -275,29 +272,35 @@ Please check your API key configuration or try again later.`;
 
   // Memoized prediction calculation function
   const calculatePredictions = useCallback((values: CountryStats, sourceSliderId: string) => {
-    // New equations with carbon emissions
+    // Updated Linear Regression equations with improved accuracy
+    // LifeExpectancy: R² = 0.9908, RMSE = 0.5735
     const predictLifeExpectancy = (airQuality: number, waterQuality: number, populationGrowth: number, gdp: number, carbonEmissions: number) => {
-      return 55.1562 + 0.0081 * airQuality + 0.1147 * waterQuality - 3.9004 * populationGrowth + 0.0009 * gdp + 0.0048 * carbonEmissions;
+      return 56.8587 + 0.0242 * airQuality + 0.1480 * waterQuality - 5.8920 * populationGrowth + 0.0003 * gdp + 2.1097 * carbonEmissions;
     };
 
+    // AirQuality: R² = 0.9118, RMSE = 4.9179
     const predictAirQuality = (lifeExpectancy: number, waterQuality: number, populationGrowth: number, gdp: number, carbonEmissions: number) => {
-      return 3.7091 + 2.7131 * lifeExpectancy + 1.2923 * waterQuality - 26.3698 * populationGrowth - 0.0366 * gdp + 0.0017 * carbonEmissions;
+      return 54.1191 + 4.7854 * lifeExpectancy + 0.8415 * waterQuality - 35.9174 * populationGrowth - 0.0287 * gdp - 37.8872 * carbonEmissions;
     };
 
+    // WaterQuality: R² = 0.9834, RMSE = 1.1886
     const predictWaterQuality = (lifeExpectancy: number, airQuality: number, populationGrowth: number, gdp: number, carbonEmissions: number) => {
-      return -47.0764 + 1.3957 * lifeExpectancy + 0.0471 * airQuality + 3.0430 * populationGrowth + 0.0023 * gdp - 0.0010 * carbonEmissions;
+      return -45.6846 + 1.3958 * lifeExpectancy + 0.0402 * airQuality + 2.8796 * populationGrowth + 0.0025 * gdp - 1.0669 * carbonEmissions;
     };
 
+    // PopulationGrowth: R² = 0.9824, RMSE = 0.0673
     const predictPopulationGrowth = (lifeExpectancy: number, airQuality: number, waterQuality: number, gdp: number, carbonEmissions: number) => {
-      return 5.2874 - 0.0545 * lifeExpectancy - 0.0011 * airQuality + 0.0035 * waterQuality - 0.0001 * gdp - 0.0003 * carbonEmissions;
+      return 5.9622 - 0.0653 * lifeExpectancy - 0.0020 * airQuality + 0.0034 * waterQuality - 0.0001 * gdp - 0.1377 * carbonEmissions;
     };
 
+    // GDP: R² = 0.9808, RMSE = 175.8388
     const predictGDP = (lifeExpectancy: number, airQuality: number, waterQuality: number, populationGrowth: number, carbonEmissions: number) => {
-      return -3208.9994 + 143.6661 * lifeExpectancy - 16.5578 * airQuality + 28.7421 * waterQuality - 1246.5250 * populationGrowth - 1.6768 * carbonEmissions;
+      return 1866.1816 + 40.9855 * lifeExpectancy - 23.4287 * airQuality + 41.9644 * waterQuality - 1096.3512 * populationGrowth - 80.3414 * carbonEmissions;
     };
 
+    // CarbonEmissions: R² = 0.9938, RMSE = 0.0457
     const predictCarbonEmissions = (lifeExpectancy: number, airQuality: number, waterQuality: number, populationGrowth: number, gdp: number) => {
-      return 2772.8667 + 70.3028 * lifeExpectancy + 0.0762 * airQuality - 1.2057 * waterQuality - 281.6896 * populationGrowth - 0.1628 * gdp;
+      return -1.4064 + 0.0693 * lifeExpectancy - 0.0063 * airQuality - 0.0037 * waterQuality - 0.4083 * populationGrowth - 0.0000 * gdp;
     };
 
     // Start with current values
