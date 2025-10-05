@@ -795,7 +795,7 @@ Please check your API key configuration or try again later.`;
                 </div>
 
             {/* Datasets Section */}
-            <div className="mt-8 pt-6 border-t border-gray-200">
+            {/* <div className="mt-8 pt-6 border-t border-gray-200">
               <button
                 onClick={() => setDatasetsExpanded(!datasetsExpanded)}
                 className="flex items-center justify-between w-full text-left hover:bg-gray-50 rounded-lg p-3 transition-colors"
@@ -870,7 +870,7 @@ Please check your API key configuration or try again later.`;
                   </div>
                 </div>
               </div>
-            </div>
+            </div> */}
 
             {/* Gemini AI Assistant Section */}
             <div className="mt-8 pt-6 border-t border-gray-200">
