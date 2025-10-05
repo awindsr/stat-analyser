@@ -43,6 +43,13 @@ export default function Home() {
   const [insightFacts, setInsightFacts] = useState<string[]>([]);
   const [currentFactSet, setCurrentFactSet] = useState(0);
   const [sliderFactsCache, setSliderFactsCache] = useState<{ [key: string]: string[] }>({});
+  const [showDatasetModal, setShowDatasetModal] = useState(false);
+  const [datasetData, setDatasetData] = useState<{ headers: string[], rows: string[][] } | null>(null);
+  const [datasetName, setDatasetName] = useState('');
+  const [geminiMessages, setGeminiMessages] = useState<Array<{ role: 'user' | 'assistant', content: string }>>([]);
+  const [geminiInput, setGeminiInput] = useState('');
+  const [isGeminiLoading, setIsGeminiLoading] = useState(false);
+  const [datasetsExpanded, setDatasetsExpanded] = useState(false);
 
   // Show insight modal with content based on current values
   const showInsight = async (title: string) => {
@@ -80,6 +87,151 @@ export default function Home() {
   const getCurrentFacts = () => {
     const startIndex = currentFactSet * 4;
     return insightFacts.slice(startIndex, startIndex + 4);
+  };
+
+  // Parse CSV data and show dataset modal
+  const showDataset = async (fileName: string, datasetName: string) => {
+    try {
+      const response = await fetch(`/assets/${fileName}`);
+      const csvText = await response.text();
+      
+      // Parse CSV
+      const lines = csvText.trim().split('\n');
+      const headers = lines[0].split(',');
+      const rows = lines.slice(1).map(line => line.split(','));
+      
+      setDatasetData({ headers, rows });
+      setDatasetName(datasetName);
+      setShowDatasetModal(true);
+    } catch (error) {
+      console.error('Error loading dataset:', error);
+    }
+  };
+
+
+  // Handle Gemini chat with context
+  const handleGeminiChat = async (message: string) => {
+    if (!message.trim()) return;
+    
+    setIsGeminiLoading(true);
+    const userMessage = { role: 'user' as const, content: message };
+    setGeminiMessages(prev => [...prev, userMessage]);
+    setGeminiInput('');
+    
+    try {
+      const contextPrompt = `
+You are an expert AI assistant helping users understand global development statistics. 
+
+Current context for ${selectedCountry || 'the selected country'}:
+- Life Expectancy: ${sliderValues.lifeExpectancy.toFixed(1)} years
+- Air Quality: ${sliderValues.airQuality.toFixed(1)}/100
+- Water Quality: ${sliderValues.waterQuality.toFixed(1)}/100
+- Population Growth: ${sliderValues.populationGrowth.toFixed(2)}%
+- GDP per capita: $${sliderValues.gdp.toFixed(0)}
+- Carbon Emissions: ${(sliderValues.carbonEmissions || 0).toFixed(2)} tons CO₂ per capita
+
+User question: ${message}
+
+Please provide a helpful, educational response that relates to the current statistical values. Focus on:
+1. What these statistics mean in context
+2. How they relate to each other
+3. Policy implications or insights
+4. Comparisons to global averages or other countries
+
+Keep responses concise but informative (2-3 sentences). Use markdown formatting for emphasis.
+`;
+
+      console.log('Sending request to AI API...');
+      
+      // Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      const response = await fetch('/api/gemini-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: contextPrompt }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      console.log('API Response status:', response.status);
+      
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+          errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+        }
+        console.error('API Error:', errorData);
+        throw new Error(`API Error: ${errorData.error || errorData.message || 'Failed to get response'}`);
+      }
+      
+      let data;
+      try {
+        data = await response.json();
+        console.log('API Response:', data);
+      } catch (parseError) {
+        console.error('Failed to parse API response:', parseError);
+        throw new Error('Invalid response format from API');
+      }
+      
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid response format from API');
+      }
+      
+      if (!data.response) {
+        throw new Error(`No response from AI. API returned: ${JSON.stringify(data)}`);
+      }
+      
+      if (typeof data.response !== 'string' || data.response.trim() === '') {
+        throw new Error('Empty response from AI');
+      }
+      
+      const assistantMessage = { role: 'assistant' as const, content: data.response };
+      setGeminiMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error('Error with AI chat:', error);
+      
+      // Try fallback using existing AI service
+      try {
+        console.log('Trying fallback with existing AI service...');
+        const fallbackResponse = await generateCountryInsight(selectedCountry || 'Global', {
+          lifeExpectancy: sliderValues.lifeExpectancy,
+          airQuality: sliderValues.airQuality,
+          waterQuality: sliderValues.waterQuality,
+          populationGrowth: sliderValues.populationGrowth,
+          gdp: sliderValues.gdp,
+          carbonEmissions: sliderValues.carbonEmissions || 0
+        });
+        
+        const fallbackMessage = { role: 'assistant' as const, content: `Based on the current statistics, here's some insight: ${fallbackResponse}` };
+        setGeminiMessages(prev => [...prev, fallbackMessage]);
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError);
+        
+        // Final fallback - provide basic statistics
+        const statsMessage = `I'm having trouble connecting to the AI service. Here are your current statistics:
+
+**${selectedCountry || 'Selected Country'} Statistics:**
+- **Life Expectancy**: ${sliderValues.lifeExpectancy.toFixed(1)} years
+- **Air Quality**: ${sliderValues.airQuality.toFixed(1)}/100
+- **Water Quality**: ${sliderValues.waterQuality.toFixed(1)}/100
+- **Population Growth**: ${sliderValues.populationGrowth.toFixed(2)}%
+- **GDP per capita**: $${sliderValues.gdp.toFixed(0)}
+- **Carbon Emissions**: ${(sliderValues.carbonEmissions || 0).toFixed(2)} tons CO₂ per capita
+
+Please check your API key configuration or try again later.`;
+        
+        const errorMessage = { role: 'assistant' as const, content: statsMessage };
+        setGeminiMessages(prev => [...prev, errorMessage]);
+      }
+    } finally {
+      setIsGeminiLoading(false);
+    }
   };
 
   const handleInfoButtonClick = (sliderId: string) => {
@@ -394,6 +546,7 @@ export default function Home() {
       `}</style>
 
       <main className="bg-white min-h-screen relative">
+
         {/* Hamburger Menu Button */}
         <button
           onClick={() => setMenuOpen(!menuOpen)}
@@ -641,6 +794,173 @@ export default function Home() {
                   </div>
                 </div>
 
+            {/* Datasets Section */}
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <button
+                onClick={() => setDatasetsExpanded(!datasetsExpanded)}
+                className="flex items-center justify-between w-full text-left hover:bg-gray-50 rounded-lg p-3 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800">Available Datasets</h3>
+                    <p className="text-sm text-gray-600">View and download statistical data files</p>
+                  </div>
+                </div>
+                <svg
+                  className={`w-5 h-5 text-gray-500 transition-transform duration-200 ${
+                    datasetsExpanded ? 'rotate-180' : 'rotate-0'
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                datasetsExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+              }`}>
+                <div className="pt-4">
+                  <div className="grid grid-cols-1 gap-3">
+                    {[
+                      { name: 'Air Quality', file: 'air_quality.csv', description: 'Air quality index data by region and year' },
+                      { name: 'Carbon Emissions', file: 'carbon_emission.csv', description: 'Carbon emission data by region and year' },
+                      { name: 'GDP', file: 'gdp.csv', description: 'Gross Domestic Product data by region and year' },
+                      { name: 'Life Expectancy', file: 'life_expectancy.csv', description: 'Life expectancy data by region and year' },
+                      { name: 'Population Rate', file: 'population_rate.csv', description: 'Population growth rate data by region and year' },
+                      { name: 'Water Quality', file: 'water_quality.csv', description: 'Water quality index data by region and year' }
+                    ].map((dataset) => (
+                      <div key={dataset.file} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <h4 className="font-medium text-gray-800">{dataset.name}</h4>
+                            <p className="text-sm text-gray-600 mt-1">{dataset.description}</p>
+                          </div>
+                          <div className="flex gap-2 ml-4">
+                            <button
+                              onClick={() => showDataset(dataset.file, dataset.name)}
+                              className="text-blue-500 hover:text-blue-700 transition-colors p-2 rounded-lg hover:bg-blue-50"
+                              title="View dataset"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            </button>
+                            <a
+                              href={`/assets/${dataset.file}`}
+                              download={dataset.file}
+                              className="text-green-500 hover:text-green-700 transition-colors p-2 rounded-lg hover:bg-green-50"
+                              title="Download dataset"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Gemini AI Assistant Section */}
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">AI Assistant</h3>
+              <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-800">AI Assistant</h4>
+                    <p className="text-sm text-gray-600">Ask questions about the current statistics</p>
+                  </div>
+                </div>
+
+                {/* Chat Messages */}
+                <div className="h-64 overflow-y-auto p-3 bg-white rounded-lg border border-gray-200 space-y-3 mb-4">
+                  {geminiMessages.length === 0 ? (
+                    <div className="text-center text-gray-500 py-8">
+                      <svg className="w-8 h-8 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      <p className="text-sm">Ask me about the current statistics!</p>
+                    </div>
+                  ) : (
+                    geminiMessages.map((message, index) => (
+                      <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] p-3 rounded-lg text-sm ${
+                          message.role === 'user' 
+                            ? 'bg-blue-500 text-white' 
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          <div className="prose prose-sm max-w-none">
+                            <ReactMarkdown>{message.content}</ReactMarkdown>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  {isGeminiLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-gray-100 p-3 rounded-lg">
+                        <div className="flex space-x-1">
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Chat Input */}
+                <form onSubmit={(e) => { e.preventDefault(); handleGeminiChat(geminiInput); }} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={geminiInput}
+                    onChange={(e) => setGeminiInput(e.target.value)}
+                    placeholder="Ask about the statistics..."
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    disabled={isGeminiLoading}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (geminiInput.trim() && !isGeminiLoading) {
+                          handleGeminiChat(geminiInput);
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={isGeminiLoading || !geminiInput.trim()}
+                    className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-all duration-200 flex items-center justify-center min-w-[40px]"
+                    title={isGeminiLoading ? "AI is thinking..." : "Send message"}
+                  >
+                    {isGeminiLoading ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </form>
+              </div>
+            </div>
+
             {/* Chart Toggle Button */}
             {/* <div className="mt-8 pt-6 border-t border-gray-200">
               <button
@@ -796,6 +1116,67 @@ export default function Home() {
                 >
                   Close
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dataset Modal */}
+        {showDatasetModal && datasetData && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white/90 rounded-2xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden transition-all duration-300">
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-blue-500/20 to-purple-600/20 backdrop-blur-sm border-b border-white/20 text-white p-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold text-gray-900 tracking-tight">{datasetName} Dataset</h2>
+                  <button
+                    onClick={() => setShowDatasetModal(false)}
+                    className="text-gray-400 hover:text-gray-700 transition-colors p-2 rounded-full"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              
+              {/* Modal Content */}
+              <div className="overflow-auto max-h-[calc(90vh-120px)]">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {datasetData.headers.map((header, index) => (
+                          <th
+                            key={index}
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            {header}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {datasetData.rows.slice(0, 100).map((row, rowIndex) => (
+                        <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          {row.map((cell, cellIndex) => (
+                            <td
+                              key={cellIndex}
+                              className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                            >
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {datasetData.rows.length > 100 && (
+                    <div className="p-4 bg-gray-50 text-center text-sm text-gray-600">
+                      Showing first 100 rows of {datasetData.rows.length} total rows
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
